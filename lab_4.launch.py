@@ -21,8 +21,18 @@ from launch.substitutions import Command, FindExecutable, PathJoinSubstitution, 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
+import platform
+
 
 def generate_launch_description():
+    # On macOS the real robot's control_board_hardware_interface can't be
+    # built (it needs Linux-only SPI headers), so simulate with Mujoco
+    # instead. Anywhere else (the robot's Raspberry Pi), use real hardware.
+    if platform.system() == "Darwin":
+        urdf_xacro_file = "pupper_v3_mujoco.urdf.xacro"
+    else:
+        urdf_xacro_file = "pupper_v3.urdf.xacro"
+
     # Get URDF via xacro
     robot_description_content = Command(
         [
@@ -32,7 +42,7 @@ def generate_launch_description():
                 [
                     FindPackageShare("pupper_v3_description"),
                     "description",
-                    "pupper_v3.urdf.xacro",
+                    urdf_xacro_file,
                 ]
             ),
         ]
