@@ -2,49 +2,83 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
+from visualization_msgs.msg import Marker, MarkerArray
 import numpy as np
+
 np.set_printoptions(precision=3, suppress=True)
+
 
 def rotation_x(angle):
     ################################################################################################
     # TODO: [already done] paste lab 2 forward kinematics here
     ################################################################################################
-    return
+    # rotation about the x-axis implemented for you
+    return np.array(
+        [
+            [1, 0, 0, 0],
+            [0, np.cos(angle), -np.sin(angle), 0],
+            [0, np.sin(angle), np.cos(angle), 0],
+            [0, 0, 0, 1],
+        ]
+    )
+
 
 def rotation_y(angle):
     ################################################################################################
     # TODO: [already done] paste lab 2 forward kinematics here
     ################################################################################################
-    return
+    return np.array(
+        [
+            [np.cos(angle), 0, np.sin(angle), 0],
+            [0, 1, 0, 0],
+            [-np.sin(angle), 0, np.cos(angle), 0],
+            [0, 0, 0, 1],
+        ]
+    )
+
 
 def rotation_z(angle):
     ################################################################################################
     # TODO: [already done] paste lab 2 forward kinematics here
     ################################################################################################
-    return
+    return np.array(
+        [
+            [np.cos(angle), -np.sin(angle), 0, 0],
+            [np.sin(angle), np.cos(angle), 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ]
+    )
+
 
 def translation(x, y, z):
     ################################################################################################
     # TODO: [already done] paste lab 2 forward kinematics here
     ################################################################################################
-    return
+    return np.array(
+        [
+            [1, 0, 0, x],
+            [0, 1, 0, y],
+            [0, 0, 1, z],
+            [0, 0, 0, 1],
+        ]
+    )
+
 
 class InverseKinematics(Node):
 
     def __init__(self):
-        super().__init__('inverse_kinematics')
+        super().__init__("inverse_kinematics")
         self.joint_subscription = self.create_subscription(
-            JointState,
-            'joint_states',
-            self.listener_callback,
-            10)
+            JointState, "joint_states", self.listener_callback, 10
+        )
         self.joint_subscription  # prevent unused variable warning
 
         self.command_publisher = self.create_publisher(
-            Float64MultiArray,
-            '/forward_command_controller/commands',
-            10
+            Float64MultiArray, "/forward_command_controller/commands", 10
         )
+        self.marker_publisher = self.create_publisher(MarkerArray, "ee_markers", 10)
+        self.leg_names = ["front_right", "front_left", "back_right", "back_left"]
 
         self.joint_positions = None
         self.joint_velocities = None
@@ -58,57 +92,96 @@ class InverseKinematics(Node):
         stand_position_3 = np.array([-0.025, 0.0, -0.14])
         liftoff_position = np.array([-0.05, 0.0, -0.14])
         mid_swing_position = np.array([0.0, 0.0, -0.05])
-        
+
         ## trotting
         # TODO: Implement each leg’s trajectory in the trotting gait.
         rf_ee_offset = np.array([0.06, -0.09, 0])
-        rf_ee_triangle_positions = np.array([
-            ################################################################################################
-            # TODO: Implement the trotting gait
-            ################################################################################################
-        ]) + rf_ee_offset
-        
+        rf_ee_triangle_positions = (
+            np.array(
+                [
+                    ################################################################################################
+                    # TODO: Implement the trotting gait
+                    ################################################################################################
+                ]
+            )
+            + rf_ee_offset
+        )
+
         lf_ee_offset = np.array([0.06, 0.09, 0])
-        lf_ee_triangle_positions = np.array([
-            ################################################################################################
-            # TODO: Implement the trotting gait
-            ################################################################################################
-        ]) + lf_ee_offset
-        
+        lf_ee_triangle_positions = (
+            np.array(
+                [
+                    ################################################################################################
+                    # TODO: Implement the trotting gait
+                    ################################################################################################
+                ]
+            )
+            + lf_ee_offset
+        )
+
         rb_ee_offset = np.array([-0.11, -0.09, 0])
-        rb_ee_triangle_positions = np.array([
-            ################################################################################################
-            # TODO: Implement the trotting gait
-            ################################################################################################
-        ]) + rb_ee_offset
-        
+        rb_ee_triangle_positions = (
+            np.array(
+                [
+                    ################################################################################################
+                    # TODO: Implement the trotting gait
+                    ################################################################################################
+                ]
+            )
+            + rb_ee_offset
+        )
+
         lb_ee_offset = np.array([-0.11, 0.09, 0])
-        lb_ee_triangle_positions = np.array([
-            ################################################################################################
-            # TODO: Implement the trotting gait
-            ################################################################################################
-        ]) + lb_ee_offset
+        lb_ee_triangle_positions = (
+            np.array(
+                [
+                    ################################################################################################
+                    # TODO: Implement the trotting gait
+                    ################################################################################################
+                ]
+            )
+            + lb_ee_offset
+        )
 
+        self.ee_triangle_positions = [
+            rf_ee_triangle_positions,
+            lf_ee_triangle_positions,
+            rb_ee_triangle_positions,
+            lb_ee_triangle_positions,
+        ]
+        self.fk_functions = [
+            self.fr_leg_fk,
+            self.fl_leg_fk,
+            self.br_leg_fk,
+            self.bl_leg_fk,
+        ]
 
-        self.ee_triangle_positions = [rf_ee_triangle_positions, lf_ee_triangle_positions, rb_ee_triangle_positions, lb_ee_triangle_positions]
-        self.fk_functions = [self.fr_leg_fk, self.fl_leg_fk, self.br_leg_fk, self.bl_leg_fk]
-
-        self.target_joint_positions_cache, self.target_ee_cache = self.cache_target_joint_positions()
-        print(f'shape of target_joint_positions_cache: {self.target_joint_positions_cache.shape}')
-        print(f'shape of target_ee_cache: {self.target_ee_cache.shape}')
-
+        self.target_joint_positions_cache, self.target_ee_cache = (
+            self.cache_target_joint_positions()
+        )
+        print(
+            f"shape of target_joint_positions_cache: {self.target_joint_positions_cache.shape}"
+        )
+        print(f"shape of target_ee_cache: {self.target_ee_cache.shape}")
 
         self.pd_timer_period = 1.0 / 200  # 200 Hz
-        self.ik_timer_period = 1.0 / 100   # 10 Hz
+        self.ik_timer_period = 1.0 / 100  # 10 Hz
         self.pd_timer = self.create_timer(self.pd_timer_period, self.pd_timer_callback)
         self.ik_timer = self.create_timer(self.ik_timer_period, self.ik_timer_callback)
 
-
     def fr_leg_fk(self, theta):
         # Already implemented in Lab 2
-        T_RF_0_1 = translation(0.07500, -0.08350, 0) @ rotation_x(1.57080) @ rotation_z(theta[0])
+        T_RF_0_1 = (
+            translation(0.07500, -0.08350, 0)
+            @ rotation_x(1.57080)
+            @ rotation_z(theta[0])
+        )
         T_RF_1_2 = rotation_y(-1.57080) @ rotation_z(theta[1])
-        T_RF_2_3 = translation(0, -0.04940, 0.06850) @ rotation_y(1.57080) @ rotation_z(theta[2])
+        T_RF_2_3 = (
+            translation(0, -0.04940, 0.06850)
+            @ rotation_y(1.57080)
+            @ rotation_z(theta[2])
+        )
         T_RF_3_ee = translation(0.06231, -0.06216, 0.01800)
         T_RF_0_ee = T_RF_0_1 @ T_RF_1_2 @ T_RF_2_3 @ T_RF_3_ee
         return T_RF_0_ee[:3, 3]
@@ -117,34 +190,91 @@ class InverseKinematics(Node):
         ################################################################################################
         # TODO: implement forward kinematics here
         ################################################################################################
-        return
+
+        T_LF_0_1 = (
+            translation(0.07500, 0.08350, 0)
+            @ rotation_x(1.57080)
+            @ rotation_z(-theta[0])
+        )
+        T_LF_1_2 = rotation_y(-1.57080) @ rotation_z(theta[1])
+        T_LF_2_3 = (
+            translation(0, 0.04940, 0.06850)
+            @ rotation_y(1.57080)
+            @ rotation_z(-theta[2])
+        )
+        T_LF_3_ee = translation(0.06231, -0.06216, -0.018)
+        T_LF_0_ee = T_LF_0_1 @ T_LF_1_2 @ T_LF_2_3 @ T_LF_3_ee
+        return T_LF_0_ee[:3, 3]
 
     def br_leg_fk(self, theta):
         ################################################################################################
         # TODO: implement forward kinematics here
         ################################################################################################
-        return
+        # Already implemented in Lab 2
+        T_RB_0_1 = (
+            translation(0.07500, -0.07250, 0)
+            @ rotation_x(1.57080)
+            @ rotation_z(theta[0])
+        )
+        T_RB_1_2 = rotation_y(-1.57080) @ rotation_z(theta[1])
+        T_RB_2_3 = (
+            translation(0, -0.04940, 0.06850)
+            @ rotation_y(1.57080)
+            @ rotation_z(theta[2])
+        )
+        T_RB_3_ee = translation(0.06231, -0.06216, 0.01800)
+        T_RB_0_ee = T_RB_0_1 @ T_RB_1_2 @ T_RB_2_3 @ T_RB_3_ee
+        return T_RB_0_ee[:3, 3]
 
     def bl_leg_fk(self, theta):
         ################################################################################################
         # TODO: implement forward kinematics here
         ################################################################################################
-        return
+        T_LB_0_1 = (
+            translation(-0.07500, 0.07250, 0)
+            @ rotation_x(1.57080)
+            @ rotation_z(-theta[0])
+        )
+        T_LB_1_2 = rotation_y(-1.57080) @ rotation_z(theta[1])
+        T_LB_2_3 = (
+            translation(0, 0.04940, 0.06850)
+            @ rotation_y(1.57080)
+            @ rotation_z(-theta[2])
+        )
+        T_LB_3_ee = translation(0.06231, -0.06216, -0.018)
+        T_LB_0_ee = T_LB_0_1 @ T_LB_1_2 @ T_LB_2_3 @ T_LB_3_ee
+        return T_LB_0_ee[:3, 3]
 
     def forward_kinematics(self, theta):
-        return np.concatenate([self.fk_functions[i](theta[3*i: 3*i+3]) for i in range(4)])
+        return np.concatenate(
+            [self.fk_functions[i](theta[3 * i : 3 * i + 3]) for i in range(4)]
+        )
 
     def listener_callback(self, msg):
         joints_of_interest = [
-            'leg_front_r_1', 'leg_front_r_2', 'leg_front_r_3', 
-            'leg_front_l_1', 'leg_front_l_2', 'leg_front_l_3', 
-            'leg_back_r_1', 'leg_back_r_2', 'leg_back_r_3', 
-            'leg_back_l_1', 'leg_back_l_2', 'leg_back_l_3'
+            "leg_front_r_1",
+            "leg_front_r_2",
+            "leg_front_r_3",
+            "leg_front_l_1",
+            "leg_front_l_2",
+            "leg_front_l_3",
+            "leg_back_r_1",
+            "leg_back_r_2",
+            "leg_back_r_3",
+            "leg_back_l_1",
+            "leg_back_l_2",
+            "leg_back_l_3",
         ]
-        self.joint_positions = np.array([msg.position[msg.name.index(joint)] for joint in joints_of_interest])
-        self.joint_velocities = np.array([msg.velocity[msg.name.index(joint)] for joint in joints_of_interest])
+        self.joint_positions = np.array(
+            [msg.position[msg.name.index(joint)] for joint in joints_of_interest]
+        )
+        self.joint_velocities = np.array(
+            [msg.velocity[msg.name.index(joint)] for joint in joints_of_interest]
+        )
 
-    def inverse_kinematics_single_leg(self, target_ee, leg_index, initial_guess=[0, 0, 0]):
+    def inverse_kinematics_single_leg(
+        self, target_ee, leg_index, initial_guess=[0, 0, 0]
+    ):
         leg_forward_kinematics = self.fk_functions[leg_index]
 
         def cost_function(theta):
@@ -162,9 +292,11 @@ class InverseKinematics(Node):
             return grad
 
         theta = np.array(initial_guess)
-        learning_rate = None # TODO:[already done] paste lab 3 inverse kinematics here
-        max_iterations = None # TODO: [already done] paste lab 3 inverse kinematics here
-        tolerance = None # TODO: [already done] paste lab 3 inverse kinematics here
+        learning_rate = None  # TODO:[already done] paste lab 3 inverse kinematics here
+        max_iterations = (
+            None  # TODO: [already done] paste lab 3 inverse kinematics here
+        )
+        tolerance = None  # TODO: [already done] paste lab 3 inverse kinematics here
 
         cost_l = []
         for _ in range(max_iterations):
@@ -179,7 +311,7 @@ class InverseKinematics(Node):
         ################################################################################################
         # TODO: implement interpolation for all 4 legs here
         ################################################################################################
-        
+
         return
 
     def cache_target_joint_positions(self):
@@ -193,15 +325,19 @@ class InverseKinematics(Node):
             for t in np.arange(0, 1, 0.02):
                 print(t)
                 target_ee = self.interpolate_triangle(t, leg_index)
-                target_joint_positions = self.inverse_kinematics_single_leg(target_ee, leg_index, initial_guess=target_joint_positions)
+                target_joint_positions = self.inverse_kinematics_single_leg(
+                    target_ee, leg_index, initial_guess=target_joint_positions
+                )
 
                 target_joint_positions_cache[leg_index].append(target_joint_positions)
                 target_ee_cache[leg_index].append(target_ee)
 
         # (4, 50, 3) -> (50, 12)
-        target_joint_positions_cache = np.concatenate(target_joint_positions_cache, axis=1)
+        target_joint_positions_cache = np.concatenate(
+            target_joint_positions_cache, axis=1
+        )
         target_ee_cache = np.concatenate(target_ee_cache, axis=1)
-        
+
         return target_joint_positions_cache, target_ee_cache
 
     def get_target_joint_positions(self):
@@ -212,17 +348,51 @@ class InverseKinematics(Node):
             self.counter = 0
         return target_ee, target_joint_positions
 
+    def make_ee_marker(self, position, marker_id, ns, color):
+        marker = Marker()
+        marker.header.frame_id = "base_link"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = ns
+        marker.id = marker_id
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        marker.pose.position.x = float(position[0])
+        marker.pose.position.y = float(position[1])
+        marker.pose.position.z = float(position[2])
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = marker.scale.y = marker.scale.z = 0.02
+        marker.color.r, marker.color.g, marker.color.b = color
+        marker.color.a = 1.0
+        return marker
+
+    def publish_ee_markers(self, target_ee, current_ee):
+        marker_array = MarkerArray()
+        for i, leg_name in enumerate(self.leg_names):
+            target_position = target_ee[3 * i : 3 * i + 3]
+            current_position = current_ee[3 * i : 3 * i + 3]
+            marker_array.markers.append(
+                self.make_ee_marker(
+                    target_position, i, f"{leg_name}_target", (1.0, 0.0, 0.0)
+                )
+            )
+            marker_array.markers.append(
+                self.make_ee_marker(
+                    current_position, i, f"{leg_name}_current", (0.0, 1.0, 0.0)
+                )
+            )
+        self.marker_publisher.publish(marker_array)
+
     def ik_timer_callback(self):
         if self.joint_positions is not None:
             target_ee, self.target_joint_positions = self.get_target_joint_positions()
             current_ee = self.forward_kinematics(self.joint_positions)
+            self.publish_ee_markers(target_ee, current_ee)
 
-            self.get_logger().info(
-                f'Target EE: {target_ee}, \
+            self.get_logger().info(f"Target EE: {target_ee}, \
                 Current EE: {current_ee}, \
                 Target Angles: {self.target_joint_positions}, \
                 Target Angles to EE: {self.forward_kinematics(self.target_joint_positions)}, \
-                Current Angles: {self.joint_positions}')
+                Current Angles: {self.joint_positions}")
 
     def pd_timer_callback(self):
         if self.target_joint_positions is not None:
@@ -230,10 +400,11 @@ class InverseKinematics(Node):
             command_msg.data = self.target_joint_positions.tolist()
             self.command_publisher.publish(command_msg)
 
+
 def main():
     rclpy.init()
     inverse_kinematics = InverseKinematics()
-    
+
     try:
         rclpy.spin(inverse_kinematics)
     except KeyboardInterrupt:
@@ -243,9 +414,10 @@ def main():
         zero_torques = Float64MultiArray()
         zero_torques.data = [0.0] * 12
         inverse_kinematics.command_publisher.publish(zero_torques)
-        
+
         inverse_kinematics.destroy_node()
         rclpy.shutdown()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
